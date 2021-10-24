@@ -20,9 +20,15 @@ const handlebarsOptions = {
 const buildOptionsSpec = {
     entry: 'string',
     partialsDir: 'string',
-    output: 'object',
+
+    output: () => ({
+        dir: 'string',
+        filename: 'string'
+    }),
+
     data: 'object',
-    components: 'object'
+
+    components: 'components'
 };
 
 /**
