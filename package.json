@@ -18,7 +18,8 @@
     "scpwiki"
   ],
   "dependencies": {
-    "handlebars": "^4.7.7"
+    "handlebars": "^4.7.7",
+    "scpwiki-handlebars-util": "file:../scpwiki-handlebars-util"
   },
   "devDependencies": {
     "@types/node": "^16.11.4"
