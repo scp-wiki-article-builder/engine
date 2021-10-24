@@ -1,0 +1,26 @@
+{
+  "name": "scpwiki-handlebars",
+  "version": "1.0.0",
+  "description": "Write SCP Wiki articles with a templating engine!",
+  "author": "422404",
+  "license": "MIT",
+  "type": "module",
+  "main": "./index.js",
+  "exports": "./index.js",
+  "bin": {
+    "scpwiki-handlebars": "./bin/scpwiki-handlebars.js"
+  },
+  "scripts": {},
+  "keywords": [
+    "handlebars",
+    "scp-foundation",
+    "wikidot",
+    "scpwiki"
+  ],
+  "dependencies": {
+    "handlebars": "^4.7.7"
+  },
+  "devDependencies": {
+    "@types/node": "^16.11.4"
+  }
+}
