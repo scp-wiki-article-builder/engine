@@ -9,10 +9,9 @@ if (process.argv.length !== 3) {
 }
 
 const configPath = path.resolve(process.cwd(), process.argv[2]);
-console.log(`Config path: ${configPath}`);
 
 (async () => {
     const configModule = await import(configPath);
-    build(configModule.default);
+    await build(configModule.default);
 })()
 .catch((reason) => console.error(reason));
