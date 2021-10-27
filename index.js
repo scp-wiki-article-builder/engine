@@ -2,7 +2,14 @@ import fs from 'fs/promises';
 import path from 'path';
 
 import Handlebars from 'handlebars';
-import { checkNamedParams } from 'scpwiki-handlebars-util';
+import colors from 'colors';
+
+import {
+    checkNamedParams,
+    ValidationException,
+    ComponentTypeCheckError,
+    TypeCheckError,
+} from 'scpwiki-handlebars-util';
 
 /**
  * @typedef {Object} BuildOptions
@@ -37,6 +44,23 @@ const buildOptionsSpec = {
  * @param {BuildOptions} options
  */
 export const build = async (options) => {
+    try {
+        await _build(options);
+    } catch (e) {
+        if (e instanceof ValidationException) {
+            printValidationException(e);
+        } else {
+            console.error(e);
+        }
+    }
+};
+
+/**
+ * Builds a template file.
+ * No catch.
+ * @param {BuildOptions} options
+ */
+export const _build = async (options) => {
     const h = Handlebars.create();
 
     checkNamedParams(buildOptionsSpec, options);
@@ -51,10 +75,13 @@ export const build = async (options) => {
         const partialFileContent = await partialFile.readFile('utf-8');
 
         h.registerPartial(partialName, partialFileContent);
+
+        await partialFile.close();
     }
 
     const entryFile = await fs.open(options.entry, 'r');
     const entryFileContent = await entryFile.readFile('utf-8');
+    await entryFile.close();
 
     const template = h.compile(entryFileContent, handlebarsOptions);
     const generatedText = template(options.data);
@@ -63,4 +90,40 @@ export const build = async (options) => {
     const outputFilePath = path.resolve(options.output.dir, options.output.filename);
     const outputFile = await fs.open(outputFilePath, 'w');
     await outputFile.writeFile(generatedText, 'utf-8');
+    await outputFile.close();
+};
+
+/**
+ * Prints the content of validation errors.
+ * @param {ValidationException} e
+ */
+const printValidationException = (e) => {
+    /** @type {Object<string, Array<ComponentTypeCheckError>>} */
+    const componentsErrorsMap = {};
+    /** @type {TypeCheckError[]} */
+    const otherErrors = [];
+
+    e.errors.forEach(error => {
+        if (error instanceof ComponentTypeCheckError) {
+            let list = componentsErrorsMap[error.componentName];
+            if (!list) {
+                list = [];
+            }
+            componentsErrorsMap[error.componentName] = [...list, error];
+        } else if (error instanceof TypeCheckError) {
+            otherErrors.push(error);
+        }
+    });
+
+    Object.keys(componentsErrorsMap).forEach((componentName, i) => {
+        if (i > 0) {
+            console.error();
+        }
+        console.error(`Error(s) in component "${componentName}":`.red);
+        componentsErrorsMap[componentName].forEach(error => {
+            console.error(`- ${error.message}`.red)
+        });
+    });
+
+    otherErrors.forEach(error => console.error(error.message.red));
 };
