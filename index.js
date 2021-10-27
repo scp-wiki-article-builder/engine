@@ -33,10 +33,11 @@ const buildOptionsSpec = {
         dir: 'string',
         filename: 'string'
     }),
+    locale: 'string',
+
+    components: 'components',
 
     data: 'object',
-
-    components: 'components'
 };
 
 /**
