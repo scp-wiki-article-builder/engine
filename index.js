@@ -84,7 +84,11 @@ export const _build = async (options) => {
     await entryFile.close();
 
     const template = h.compile(entryFileContent, handlebarsOptions);
-    const generatedText = template(options.data);
+    const generatedText = template(options.data, {
+        data: {
+            config: options
+        }
+    });
 
     await fs.mkdir(options.output.dir, { recursive: true });
     const outputFilePath = path.resolve(options.output.dir, options.output.filename);
