@@ -212,15 +212,18 @@ const loadEntryFileContent = async (options) => {
  * @returns {Promise<void>}
  */
 const writeGeneratedText = async (options, generatedText) => {
-    await fs.mkdir(options.output.dir, { recursive: true })
+    const outputDirPath = interpolatePathTemplate(options, options.output.dir);
+    const outputFileName = interpolatePathTemplate(options, options.output.filename);
+
+    await fs.mkdir(outputDirPath, { recursive: true })
         .catch(() => {
             throw new RuntimeException(
-                `Cannot create output directory: ${options.output.dir}`,
+                `Cannot create output directory: ${outputDirPath}`,
                 'Is the path correct? Do you have write privileges on the parent directory?'
             );
         });
 
-    const outputFilePath = path.resolve(options.output.dir, options.output.filename);
+    const outputFilePath = path.resolve(outputDirPath, outputFileName);
     const outputFile = await fs.open(outputFilePath, 'w')
         .catch(() => {
             throw new RuntimeException(
@@ -245,6 +248,26 @@ const writeGeneratedText = async (options, generatedText) => {
                 'A reality bender might be playing your storage device...'
             );
         });
+};
+
+/**
+ * Interpolates a path with a minimal context (no helpers
+ * or partials, no localized strings).
+ * @param {BuildOptions} options
+ * @param {string} pathTemplate
+ * @returns {string}
+ */
+const interpolatePathTemplate = (options, pathTemplate) => {
+    const h = Handlebars.create();
+
+    const template = h.compile(pathTemplate, handlebarsOptions);
+    const path = template(options.data, {
+        data: {
+            config: options
+        }
+    });
+
+    return path;
 };
 
 /**
