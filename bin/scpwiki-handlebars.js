@@ -2,6 +2,8 @@
 
 import path from 'path';
 
+import colors from 'colors';
+
 import { build } from '../index.js';
 
 if (process.argv.length !== 3) {
@@ -10,8 +12,13 @@ if (process.argv.length !== 3) {
 
 const configPath = path.resolve(process.cwd(), process.argv[2]);
 
-(async () => {
+try {
     const configModule = await import(configPath);
     await build(configModule.default, configPath);
-})()
-.catch((reason) => console.error(reason));
+} catch (e) {
+    if (e.code === 'ERR_MODULE_NOT_FOUND') {
+        console.error(`Cannot load build config file: ${configPath}`.red);
+    } else {
+        console.error(`Unexpected error:\n${e}`.red);
+    }
+}
