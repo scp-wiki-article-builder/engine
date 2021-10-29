@@ -1,26 +1,26 @@
 {
-  "name": "scpwiki-handlebars",
+  "name": "@scp-wiki-article-builder/engine",
   "version": "1.0.0",
-  "description": "Write SCP Wiki articles with a templating engine!",
+  "description": "Write SCP articles with a templating engine!",
   "author": "422404",
   "license": "CC BY-SA 3.0",
   "type": "module",
   "main": "./index.js",
   "exports": "./index.js",
   "bin": {
-    "scpwiki-handlebars": "./bin/scpwiki-handlebars.js"
+    "build-article": "./bin/build-article.js"
   },
-  "scripts": {},
   "keywords": [
     "handlebars",
     "scp-foundation",
     "wikidot",
-    "scpwiki"
+    "scp-wiki",
+    "scp"
   ],
   "dependencies": {
     "colors": "^1.4.0",
     "handlebars": "^4.7.7",
-    "scpwiki-handlebars-util": "file:../scpwiki-handlebars-util"
+    "@scp-wiki-article-builder/util": "^1.0.0"
   },
   "devDependencies": {
     "@types/node": "^16.11.4"

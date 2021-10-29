@@ -12,7 +12,7 @@ import {
     TypeCheckError,
     RuntimeException,
     ComponentException,
-} from 'scpwiki-handlebars-util';
+} from '@scp-wiki-article-builder/util';
 
 /**
  * @typedef {Object} BuildOptions
