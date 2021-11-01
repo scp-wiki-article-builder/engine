@@ -43,54 +43,99 @@ const buildOptionsSpec = {
 
     components: 'components',
 
+    subProjects: { type: 'object', optional: true },
+
     data: 'object',
 };
 
 /**
- * Builds a template file.
- * @param {BuildOptions} options
- * @param {string} configFilePath
+ * Loads a project build config file.
+ * @param {string} configPath
+ * @returns {Promise<BuildOptions>}
  */
-export const build = async (options, configFilePath) => {
-    await _build(options, configFilePath)
-        .catch((e) => {
-            if (e instanceof ValidationException) {
-                printValidationException(e);
-            } else if (e instanceof ComponentException) {
-                printComponentException(e);
-            } else if (e instanceof RuntimeException) {
-                printRuntimeException(e);
-            } else {
-                handleOtherExceptions(e);
-            }
-        });
+export const loadBuildConfig = async (configPath) => {
+    let buildOptions = null;
+
+    try {
+        const configModule  = await import(configPath);
+        buildOptions = configModule.default;
+    } catch (e) {
+        if (e.code === 'ERR_MODULE_NOT_FOUND') {
+            throw new RuntimeException(
+                `Cannot load build config file: ${configPath}`,
+                'Is it the correct path?'
+            );
+        } else {
+            throw e;
+        }
+    }
+
+    return buildOptions;
+};
+
+/**
+ * Prints a thrown exception.
+ * @param {any} e
+ */
+export const printException = (e) => {
+    if (e instanceof ValidationException) {
+        printValidationException(e);
+    } else if (e instanceof ComponentException) {
+        printComponentException(e);
+    } else if (e instanceof RuntimeException) {
+        printRuntimeException(e);
+    } else {
+        printOtherExceptions(e);
+    }
 };
 
 /**
  * Builds a template file.
- * No catch.
  * @param {BuildOptions} options
  * @param {string} configFilePath
+ * @returns {Promise<string>}
  */
-export const _build = async (options, configFilePath) => {
+export const build = async (options, configFilePath) => {
+    let generatedText = null;
+
+    try {
+        generatedText = await buildWithNoErrorHandling(options, configFilePath)
+    } catch(e) {
+        printException(e);
+    }
+
+    return generatedText;
+};
+
+/**
+ * Builds a template file.
+ * Exceptions are not handled.
+ * @param {BuildOptions} options
+ * @param {string} configFilePath
+ * @returns {Promise<string>}
+ */
+export const buildWithNoErrorHandling = async (options, configFilePath) => {
     const h = Handlebars.create();
 
     checkNamedParams(buildOptionsSpec, options);
 
     registerComponents(options, h);
     await registerPartials(options, h);
+    const subProjectsData = await loadSubProjectsData(options);
     const strings = loadStrings(options, configFilePath);
     const entryFileContent = await loadEntryFileContent(options);
 
     const template = h.compile(entryFileContent, handlebarsOptions);
-    const generatedText = template(options.data, {
+
+    return template(options.data, {
         data: {
+            ...subProjectsData,
+            // We add these values after the sub-projects data
+            // to prevent overwriting them.
             config: options,
             strings
         }
     });
-
-    await writeGeneratedText(options, generatedText);
 };
 
 /**
@@ -146,6 +191,25 @@ const registerPartials = async (options, h) => {
                 );
             });
     }
+};
+
+/**
+ * Loads the data of all sub-projects.
+ * @param {BuildOptions} options
+ * @returns {Promise<any>}
+ */
+const loadSubProjectsData = async (options) => {
+    const subProjectsData = {};
+
+    if (options.subProjects) {
+        for (let subProjectName in options.subProjects) {
+            const configPath = options.subProjects[subProjectName];
+            const buildOptions = await loadBuildConfig(configPath);
+            subProjectsData[subProjectName] = buildOptions.data;
+        };
+    }
+
+    return subProjectsData;
 };
 
 /**
@@ -211,7 +275,7 @@ const loadEntryFileContent = async (options) => {
  * @param {string} generatedText
  * @returns {Promise<void>}
  */
-const writeGeneratedText = async (options, generatedText) => {
+export const writeToOutputFile = async (options, generatedText) => {
     const outputDirPath = interpolatePathTemplate(options, options.output.dir);
     const outputFileName = interpolatePathTemplate(options, options.output.filename);
 
@@ -329,6 +393,6 @@ const printRuntimeException = (e) => {
  * Handles exceptions thrown by Node.js or Handlebars.
  * @param {any} e
  */
-const handleOtherExceptions = (e) => {
-    console.error(`Unexpected error:\n${e}`.red);
+const printOtherExceptions = (e) => {
+    console.error(e);
 };
