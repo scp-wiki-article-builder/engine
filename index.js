@@ -1,5 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
+import { pathToFileURL } from 'url';
 import { createRequire } from 'module';
 
 import Handlebars from 'handlebars';
@@ -55,14 +56,15 @@ const buildOptionsSpec = {
  */
 export const loadBuildConfig = async (configPath) => {
     let buildOptions = null;
+    const configUrl = pathToFileURL(configPath);
 
     try {
-        const configModule  = await import(configPath);
+        const configModule  = await import(configUrl);
         buildOptions = configModule.default;
     } catch (e) {
         if (e.code === 'ERR_MODULE_NOT_FOUND') {
             throw new RuntimeException(
-                `Cannot load build config file: ${configPath}`,
+                `Cannot load build config file: ${configUrl.href}.\nReason: ${e.message}.`,
                 'Is it the correct path?'
             );
         } else {
