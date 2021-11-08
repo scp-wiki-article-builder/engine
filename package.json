@@ -1,6 +1,6 @@
 {
   "name": "@scp-wiki-article-builder/engine",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "Write SCP articles with a templating engine!",
   "author": "422404",
   "license": "CC BY-SA 3.0",
@@ -18,9 +18,10 @@
     "scp"
   ],
   "dependencies": {
+    "@scp-wiki-article-builder/util": "^1.2.0",
     "colors": "^1.4.0",
     "handlebars": "^4.7.7",
-    "@scp-wiki-article-builder/util": "^1.0.0"
+    "promised-handlebars": "^2.0.1"
   },
   "devDependencies": {
     "@types/node": "^16.11.4"

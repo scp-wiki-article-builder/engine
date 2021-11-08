@@ -4,6 +4,8 @@ import { pathToFileURL } from 'url';
 import { createRequire } from 'module';
 
 import Handlebars from 'handlebars';
+import promisedHandlebars from 'promised-handlebars';
+
 import colors from 'colors';
 
 import {
@@ -15,13 +17,24 @@ import {
     ComponentException,
 } from '@scp-wiki-article-builder/util';
 
+import __file from './components/__file.js';
+
+import { ImageService } from './services/ImageService.js';
+
+/**
+ * @typedef {import('./services/Service').Service} Service
+ */
+
 /**
  * @typedef {Object} BuildOptions
+ * @property {string} wikiName
+ * @property {string} pageName
  * @property {string} entry
  * @property {string} partialsDir
  * @property {string} stringsDir
  * @property {{ dir: string, filename: string }} output
  * @property {string} locale
+ * @property {any} subProjects
  * @property {any} data
  * @property {Handlebars.HelperDeclareSpec} components
  */
@@ -32,6 +45,9 @@ const handlebarsOptions = {
 };
 
 const buildOptionsSpec = {
+    wikiName: 'string',
+    pageName: 'string',
+
     entry: 'string',
     partialsDir: 'string',
     stringsDir: 'string',
@@ -72,6 +88,17 @@ export const loadBuildConfig = async (configPath) => {
         }
     }
 
+    checkNamedParams(buildOptionsSpec, buildOptions);
+
+    buildOptions = {
+        ...buildOptions,
+        // Compute interpolated values once.
+        output: {
+            dir: interpolatePathTemplate(buildOptions, buildOptions.output.dir),
+            filename: interpolatePathTemplate(buildOptions, buildOptions.output.filename)
+        }
+    };
+
     return buildOptions;
 };
 
@@ -95,13 +122,16 @@ export const printException = (e) => {
  * Builds a template file.
  * @param {BuildOptions} options
  * @param {string} configFilePath
+ * @param {any} overrideOptions
+ * @param {Object<string, Service>} existingServices If existing services are passed then new ones
+ *                                                   wont be created and lifecycle hooks wont be called.
  * @returns {Promise<string>}
  */
-export const build = async (options, configFilePath) => {
+export const build = async (options, configFilePath, overrideOptions = {}, existingServices = null) => {
     let generatedText = null;
 
     try {
-        generatedText = await buildWithNoErrorHandling(options, configFilePath)
+        generatedText = await buildWithNoErrorHandling(options, configFilePath, overrideOptions, existingServices);
     } catch(e) {
         printException(e);
     }
@@ -114,10 +144,14 @@ export const build = async (options, configFilePath) => {
  * Exceptions are not handled.
  * @param {BuildOptions} options
  * @param {string} configFilePath
+ * @param {any} overrideOptions
+ * @param {Object<string, Service>} existingServices If existing services are passed then new ones
+ *                                                   wont be created and lifecycle hooks wont be called.
  * @returns {Promise<string>}
  */
-export const buildWithNoErrorHandling = async (options, configFilePath) => {
-    const h = Handlebars.create();
+export const buildWithNoErrorHandling = async (options, configFilePath, overrideOptions = {}, existingServices = null) => {
+    const h = promisedHandlebars(Handlebars);
+    options = { ...options, ...overrideOptions };
 
     checkNamedParams(buildOptionsSpec, options);
 
@@ -126,27 +160,46 @@ export const buildWithNoErrorHandling = async (options, configFilePath) => {
     const subProjectsData = await loadSubProjectsData(options);
     const strings = loadStrings(options, configFilePath);
     const entryFileContent = await loadEntryFileContent(options);
+    const services = existingServices || createServices(options);
 
-    const template = h.compile(entryFileContent, handlebarsOptions);
+    const wrappedEntryContent =
+        `{{#__file '${options.entry}' }}` +
+        entryFileContent +
+        '{{/__file}}';
+    const template = h.compile(wrappedEntryContent, handlebarsOptions);
 
-    return template(options.data, {
+    if (!existingServices) {
+        await servicesBefore(services);
+    }
+
+    const generatedText = await template(options.data, {
         data: {
             ...subProjectsData,
             // We add these values after the sub-projects data
             // to prevent overwriting them.
             config: options,
-            strings
+            strings,
+            services
         }
     });
+
+    if (!existingServices) {
+        await servicesAfter(services);
+    }
+
+    return generatedText;
 };
 
 /**
- * Registers the supplied components.
+ * Registers both built-in and user-supplied components.
  * @param {BuildOptions} options
  * @param {Handlebars} h
  */
 const registerComponents = (options, h) => {
-    h.registerHelper({ ...options.components });
+    h.registerHelper({
+        ...options.components,
+        __file
+    });
 };
 
 /**
@@ -183,7 +236,11 @@ const registerPartials = async (options, h) => {
                 );
             });
 
-        h.registerPartial(partialName, partialFileContent);
+        const wrappedPartialContent =
+            `{{#__file '${partialFilePath}' }}` +
+            partialFileContent +
+            `{{/__file}}`;
+        h.registerPartial(partialName, wrappedPartialContent);
 
         await partialFile.close()
             .catch(() => {
@@ -272,14 +329,43 @@ const loadEntryFileContent = async (options) => {
 };
 
 /**
- * Writes the generated text to the output file.
+ * Creates the engine services.
  * @param {BuildOptions} options
- * @param {string} generatedText
+ * @returns {Object<string, Service>}
+ */
+const createServices = (options) => ({
+    ImageService: new ImageService(options),
+});
+
+/**
+ * Executes the Before hook of the services.
+ * @param {Object<string, Service>} services
  * @returns {Promise<void>}
  */
-export const writeToOutputFile = async (options, generatedText) => {
-    const outputDirPath = interpolatePathTemplate(options, options.output.dir);
-    const outputFileName = interpolatePathTemplate(options, options.output.filename);
+const servicesBefore = async (services) => {
+    for (let service in services) {
+        await services[service].beforeBuild();
+    }
+};
+
+/**
+ * Executes the After hook of the services.
+ * @param {Object<string, Service>} services
+ * @returns {Promise<void>}
+ */
+const servicesAfter = async (services) => {
+    for (let service in services) {
+        await services[service].afterBuild();
+    }
+};
+
+/**
+ * Creates the output directory.
+ * @param {BuildOptions} options
+ * @returns {Promise<void>}
+ */
+export const createOutputDir = async (options) => {
+    const outputDirPath = options.output.dir;
 
     await fs.mkdir(outputDirPath, { recursive: true })
         .catch(() => {
@@ -288,6 +374,17 @@ export const writeToOutputFile = async (options, generatedText) => {
                 'Is the path correct? Do you have write privileges on the parent directory?'
             );
         });
+};
+
+/**
+ * Writes the generated text to the output file.
+ * @param {BuildOptions} options
+ * @param {string} generatedText
+ * @returns {Promise<void>}
+ */
+export const writeToOutputFile = async (options, generatedText) => {
+    const outputDirPath = options.output.dir;
+    const outputFileName = options.output.filename;
 
     const outputFilePath = path.resolve(outputDirPath, outputFileName);
     const outputFile = await fs.open(outputFilePath, 'w')
@@ -319,11 +416,12 @@ export const writeToOutputFile = async (options, generatedText) => {
 /**
  * Interpolates a path with a minimal context (no helpers
  * or partials, no localized strings).
+ * Must be used on {@link BuildOptions#out.dir} and {@link BuildOptions#out.filename}.
  * @param {BuildOptions} options
  * @param {string} pathTemplate
  * @returns {string}
  */
-const interpolatePathTemplate = (options, pathTemplate) => {
+export const interpolatePathTemplate = (options, pathTemplate) => {
     const h = Handlebars.create();
 
     const template = h.compile(pathTemplate, handlebarsOptions);
